@@ -1,0 +1,63 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: bulk-email-api
+    restart: unless-stopped
+    ports:
+      - '${API_PORT:-4000}:4000'
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Public URLs — these must be reachable from the browser, not just from
+      # inside the Docker network, because OAuth redirects go through the user.
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      API_URL: ${API_URL:-http://localhost:4000}
+      DATABASE_FILE: /app/server/data/app.db
+      # REQUIRED. Generate with:
+      #   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
+      # REQUIRED. Changing this makes stored OAuth tokens undecryptable.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      # Optional: create the first dashboard login automatically.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Optional: seed Google credentials (they can also be entered in the UI).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      # Set to 1 when running behind a reverse proxy so rate limiting sees real IPs.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - email-data:/app/server/data
+    networks:
+      - bulk-email
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        # Baked into the browser bundle at build time — change it and rebuild.
+        NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:4000}
+    container_name: bulk-email-web
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - bulk-email
+
+volumes:
+  email-data:
+    driver: local
+
+networks:
+  bulk-email:
+    driver: bridge

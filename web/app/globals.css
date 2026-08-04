@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+
+/* Dark mode is driven by a `.dark` class on <html>, set before paint by the
+   inline script in layout.tsx so there is never a flash of the wrong theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  /* Keyboard focus should always be obvious; pointer focus should not be noisy. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+
+  ::selection {
+    @apply bg-brand-500/25;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+  }
+
+  .input-base {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm
+           transition placeholder:text-slate-400
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none
+           disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500
+           dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500
+           dark:disabled:bg-slate-900;
+  }
+
+  .label-base {
+    @apply mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300;
+  }
+
+  .hint {
+    @apply mt-1.5 text-xs text-slate-500 dark:text-slate-400;
+  }
+}
+
+/* Scrollbars: subtle, and correct in both themes. */
+@layer utilities {
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-slate-300) transparent;
+  }
+  .dark .scroll-thin {
+    scrollbar-color: var(--color-slate-700) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-slate-300 dark:bg-slate-700;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* The rich-text editor is a contentEditable region, so its content is authored by
+   the user and cannot be styled with utility classes. */
+.rte-content {
+  @apply text-sm leading-relaxed;
+}
+.rte-content:empty::before {
+  content: attr(data-placeholder);
+  @apply text-slate-400 dark:text-slate-500;
+}
+.rte-content p {
+  margin: 0 0 0.75rem;
+}
+.rte-content h1 {
+  @apply mt-2 mb-3 text-2xl font-bold;
+}
+.rte-content h2 {
+  @apply mt-2 mb-2 text-xl font-bold;
+}
+.rte-content h3 {
+  @apply mt-2 mb-2 text-lg font-semibold;
+}
+.rte-content ul {
+  @apply my-2 list-disc pl-6;
+}
+.rte-content ol {
+  @apply my-2 list-decimal pl-6;
+}
+.rte-content li {
+  @apply mb-1;
+}
+.rte-content a {
+  @apply text-brand-600 underline dark:text-brand-400;
+}
+.rte-content blockquote {
+  @apply my-2 border-l-4 border-slate-300 pl-4 text-slate-600 italic dark:border-slate-700 dark:text-slate-400;
+}
+.rte-content img {
+  @apply my-2 h-auto max-w-full rounded;
+}
+.rte-content table {
+  @apply my-2 w-full border-collapse;
+}
+.rte-content td,
+.rte-content th {
+  @apply border border-slate-300 px-2 py-1 dark:border-slate-700;
+}
+.rte-content pre {
+  @apply my-2 overflow-x-auto rounded bg-slate-100 p-3 font-mono text-xs dark:bg-slate-800;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
