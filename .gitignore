@@ -16,6 +16,10 @@ build/
 .env.*.local
 !.env.example
 
+# Scratch files holding generated credentials for a deployment target
+*.local.txt
+*secrets*.txt
+
 # Database (contains encrypted OAuth tokens and recipient data)
 data/
 *.db

@@ -34,6 +34,52 @@ function secret(name: string, devFallbackSeed: string): string {
   return createHash('sha256').update(`dev-only::${devFallbackSeed}`).digest('base64url');
 }
 
+const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const apiUrl = (process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`).replace(/\/$/, '');
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * True when the dashboard and the API are served from different hosts — for
+ * example a Vercel frontend talking to a Railway backend.
+ *
+ * This matters because browsers only attach `SameSite=Lax` cookies to same-site
+ * requests. In a split deployment the session cookie would be silently dropped
+ * from every `fetch`, so sign-in appears to succeed and then every subsequent
+ * request 401s. Cross-site cookies must be `SameSite=None`, which browsers only
+ * accept when `Secure` is also set (so it requires HTTPS on both sides).
+ *
+ * Note ports are irrelevant to "site", so localhost:3000 -> localhost:4000 stays
+ * same-site and keeps the stricter Lax default.
+ */
+const isCrossSite = Boolean(hostOf(appUrl) && hostOf(apiUrl) && hostOf(appUrl) !== hostOf(apiUrl));
+
+const sameSiteOverride = process.env.COOKIE_SAMESITE?.toLowerCase();
+const cookieSameSite: 'lax' | 'none' | 'strict' =
+  sameSiteOverride === 'none' || sameSiteOverride === 'lax' || sameSiteOverride === 'strict'
+    ? sameSiteOverride
+    : isCrossSite
+      ? 'none'
+      : 'lax';
+
+// `SameSite=None` without `Secure` is rejected outright by every current browser,
+// so a cross-site deployment implies secure cookies whether or not it was set.
+const secureCookies = process.env.SECURE_COOKIES === 'true' || isProduction || cookieSameSite === 'none';
+
+if (cookieSameSite === 'none' && !apiUrl.startsWith('https://')) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[config] APP_URL (${appUrl}) and API_URL (${apiUrl}) are on different hosts, which requires ` +
+      'SameSite=None; Secure cookies — but API_URL is not HTTPS. Sign-in will fail until both sides use HTTPS.',
+  );
+}
+
 export const config = {
   isProduction,
   env: process.env.NODE_ENV ?? 'development',
@@ -41,9 +87,11 @@ export const config = {
   host: process.env.HOST ?? '0.0.0.0',
 
   /** Public URL of the frontend. Used for CORS and post-OAuth redirects. */
-  appUrl: (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
+  appUrl,
   /** Public URL of this API. Used to build the default OAuth redirect URI. */
-  apiUrl: (process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`).replace(/\/$/, ''),
+  apiUrl,
+  isCrossSite,
+  cookieSameSite,
 
   databaseFile: resolve(process.env.DATABASE_FILE ?? './data/app.db'),
 
@@ -53,8 +101,8 @@ export const config = {
   sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? 12),
   cookieName: process.env.COOKIE_NAME ?? 'bes_session',
   csrfCookieName: 'bes_csrf',
-  /** Set to true when serving over HTTPS (required for `Secure` cookies). */
-  secureCookies: process.env.SECURE_COOKIES === 'true' || isProduction,
+  /** True when serving over HTTPS, or forced on by a cross-site deployment. */
+  secureCookies,
 
   /** Optional bootstrap admin. If set, the account is created on first boot. */
   bootstrapAdminEmail: process.env.ADMIN_EMAIL ?? '',

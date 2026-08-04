@@ -242,6 +242,104 @@ Because `NEXT_PUBLIC_API_URL` is baked in at build time, changing `API_URL` requ
 
 <br />
 
+## Deploying the API to Railway
+
+The API is a long-running stateful process — it holds queue state in memory and
+writes SQLite to disk — so it needs a container host, not a serverless platform.
+Railway fits; **Vercel does not** (see [Why not Vercel](#why-not-vercel)).
+
+`railway.toml` in the repo root already selects `server/Dockerfile`, pins the
+service to one replica, and points the health check at `/api/health`.
+
+### 1. Create the service
+
+1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Pick `gmail-bulk-sender` (grant access to the private repo when prompted)
+3. Railway reads `railway.toml` and builds `server/Dockerfile` automatically
+
+### 2. Add a volume — do this before the first real use
+
+**Settings → Volumes → Add Volume**, mount path:
+
+```
+/app/server/data
+```
+
+Without a volume the container filesystem is ephemeral, and every redeploy wipes
+your OAuth tokens, recipients and logs.
+
+### 3. Set variables
+
+**Variables** tab:
+
+| Variable | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `DATABASE_FILE` | `/app/server/data/app.db` |
+| `SESSION_SECRET` | a fresh 48-byte random string |
+| `ENCRYPTION_KEY` | a fresh 48-byte random string |
+| `APP_URL` | where the dashboard runs, e.g. `http://localhost:3000` |
+| `API_URL` | your Railway public domain, e.g. `https://<name>.up.railway.app` |
+| `TRUST_PROXY` | `1` |
+| `LOG_LEVEL` | `info` |
+
+Generate the two secrets with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+Do **not** set `PORT` — Railway injects it, and the app reads it.
+
+`SECURE_COOKIES` is not needed either: the app detects that `APP_URL` and
+`API_URL` are on different hosts and automatically switches the session cookie to
+`SameSite=None; Secure`, which is required for cross-site requests to carry it.
+Override with `COOKIE_SAMESITE` only if you know you need to.
+
+### 4. Generate the domain
+
+**Settings → Networking → Generate Domain**, then set `API_URL` to that
+`https://…` URL and redeploy.
+
+### 5. Register the new redirect URI with Google
+
+Add this to your OAuth client's **Authorized redirect URIs**:
+
+```
+https://<your-app>.up.railway.app/api/google/callback
+```
+
+Keep the localhost one too — both can coexist, so local development still works.
+
+### 6. Point the dashboard at it
+
+In `web/.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=https://<your-app>.up.railway.app
+```
+
+Restart the dashboard. Sign in, reconnect Gmail, re-import recipients.
+
+> **A Railway deployment starts empty.** The database is deliberately not in git,
+> so your existing account, Gmail connection and recipients do not travel with it.
+> To migrate instead of starting fresh, reuse your local `ENCRYPTION_KEY` (tokens
+> are undecryptable without it) and copy `server/data/app.db` onto the volume.
+
+### Why not Vercel
+
+| Requirement | Serverless reality |
+| --- | --- |
+| A send runs for minutes (110 emails ≈ 8 min) | Functions cap at 10–300s and are killed mid-run |
+| SQLite on disk | Filesystem is ephemeral; the database vanishes between invocations |
+| Pause/resume/cancel held in memory | No shared memory across invocations |
+| SSE progress stream | Long-lived connections are terminated |
+
+Deploy `web/` to Vercel if you like — it is a normal Next.js app. Just keep the
+API on a container host.
+
+<br />
+
 ## Deploying to a VPS
 
 ### 1. Build and run

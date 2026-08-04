@@ -18,7 +18,7 @@ export function issueCsrfToken(res: Response): string {
   res.cookie(config.csrfCookieName, token, {
     httpOnly: false, // must be readable by the dashboard's JS
     secure: config.secureCookies,
-    sameSite: 'lax',
+    sameSite: config.cookieSameSite,
     path: '/',
     maxAge: config.sessionTtlHours * 3600 * 1000,
   });

@@ -1,0 +1,27 @@
+# Railway deployment config for the API only.
+#
+# The build context is the repository root (server/Dockerfile copies the root
+# package.json and package-lock.json so npm can resolve the workspace), so
+# `dockerfilePath` is relative to the repo root rather than to server/.
+#
+# The frontend is not deployed here — deploy web/ separately to Vercel and point
+# its NEXT_PUBLIC_API_URL at this service's public domain.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "server/Dockerfile"
+
+[deploy]
+# Railway restarts on non-zero exit; the app exits(1) only on unrecoverable
+# start-up errors such as a missing SESSION_SECRET, so cap the retries rather
+# than crash-looping forever on a config mistake.
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+# A single instance is required, not a preference: the send engine holds its
+# queue state (pause/resume/cancel) in memory and writes to a SQLite file on an
+# attached volume. Two replicas would double-send and corrupt the database.
+numReplicas = 1
+
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30

@@ -72,7 +72,7 @@ export function issueSession(res: Response, user: SessionUser): void {
   res.cookie(config.cookieName, token, {
     httpOnly: true,
     secure: config.secureCookies,
-    sameSite: 'lax',
+    sameSite: config.cookieSameSite,
     maxAge: config.sessionTtlHours * 3600 * 1000,
     path: '/',
   });
@@ -82,7 +82,7 @@ export function clearSession(res: Response): void {
   res.clearCookie(config.cookieName, {
     httpOnly: true,
     secure: config.secureCookies,
-    sameSite: 'lax',
+    sameSite: config.cookieSameSite,
     path: '/',
   });
 }
