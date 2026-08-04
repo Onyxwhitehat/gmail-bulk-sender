@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import helmet from 'helmet';
+import * as helmetModule from 'helmet';
 import { config } from './config.js';
 import { closeDatabase, migrate } from './db/index.js';
 import { errorHandler, notFoundHandler } from './lib/errors.js';
@@ -11,6 +11,17 @@ import { ensureCsrfCookie, verifyCsrf } from './middleware/csrf.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 import { apiRouter } from './routes/index.js';
 import { sender } from './services/sender.js';
+
+/**
+ * helmet ships dual CJS/ESM builds but declares no `types` condition in its
+ * exports map, so the module shape depends on how the toolchain resolves it:
+ * some resolutions hand back the callable itself, others a namespace holding it
+ * under `.default`. Normalising here keeps the build portable across hosts —
+ * this exact mismatch broke a Vercel build that succeeded locally.
+ */
+const helmet = (
+  typeof helmetModule === 'function' ? helmetModule : (helmetModule as { default: unknown }).default
+) as typeof import('helmet').default;
 
 const app = express();
 
