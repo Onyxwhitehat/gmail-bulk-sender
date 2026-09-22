@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { RichTextEditor } from '@/components/RichTextEditor';
@@ -14,6 +14,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Field,
   Input,
@@ -39,6 +40,16 @@ interface PreviewResponse {
   estimate: { totalMs: number; human: string; delayRange: [number, number] };
   dailyLimit: number;
   dailySent: number;
+  /** Addresses deliberately left out of the send. */
+  skipped?: SkippedRecipient[];
+}
+
+/** An address the send is leaving out, and why. */
+interface SkippedRecipient {
+  email: string;
+  reason: 'already-contacted';
+  /** The date of that first contact, when one is on record. */
+  detail: string;
 }
 
 export default function ComposePage() {
@@ -60,6 +71,7 @@ function Compose() {
   const [campaignName, setCampaignName] = useState('');
   const [groupId, setGroupId] = useState<string>('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [skipContacted, setSkipContacted] = useState(true);
 
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -104,29 +116,32 @@ function Compose() {
     if (progress?.campaignId && progress.state !== 'idle') setActiveCampaign(progress.campaignId);
   }, [progress]);
 
+  /**
+   * Who this campaign is for — the one definition preview and send both use.
+   * `skipContacted` is what keeps an address already emailed out of a
+   * first-contact campaign.
+   */
+  const audience = useMemo(
+    () => ({ groupId: groupId ? Number(groupId) : null, includeAll: !groupId, skipContacted }),
+    [skipContacted, groupId],
+  );
+
   const loadPreview = useCallback(async () => {
     setPreviewLoading(true);
     try {
-      setPreview(
-        await api.post<PreviewResponse>('/api/campaigns/preview', {
-          subject,
-          bodyHtml,
-          groupId: groupId ? Number(groupId) : null,
-          includeAll: !groupId,
-        }),
-      );
+      setPreview(await api.post<PreviewResponse>('/api/campaigns/preview', { subject, bodyHtml, ...audience }));
     } catch (err) {
       toast.error('Could not build the preview', err instanceof ApiError ? err.message : undefined);
     } finally {
       setPreviewLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject, bodyHtml, groupId]);
+  }, [subject, bodyHtml, audience]);
 
   useEffect(() => {
     void loadPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId]);
+  }, [audience]);
 
   const isBusy = progress?.state === 'running' || progress?.state === 'paused' || progress?.state === 'cancelling';
 
@@ -145,17 +160,18 @@ function Compose() {
     }
 
     const fresh = await api
-      .post<PreviewResponse>('/api/campaigns/preview', {
-        subject,
-        bodyHtml,
-        groupId: groupId ? Number(groupId) : null,
-        includeAll: !groupId,
-      })
+      .post<PreviewResponse>('/api/campaigns/preview', { subject, bodyHtml, ...audience })
       .catch(() => null);
 
     const count = fresh?.recipientCount ?? preview?.recipientCount ?? 0;
     if (count === 0) {
-      toast.error('No recipients selected', 'Import recipients before sending.');
+      const omitted = fresh?.skipped ?? preview?.skipped ?? [];
+      toast.error(
+        'No recipients selected',
+        omitted.length
+          ? 'Every address in your selection has already been emailed. Untick "Skip contacts already emailed" to send anyway.'
+          : 'Import recipients before sending.',
+      );
       return;
     }
 
@@ -194,8 +210,7 @@ function Compose() {
         subject,
         bodyHtml,
         attachments,
-        groupId: groupId ? Number(groupId) : null,
-        includeAll: !groupId,
+        ...audience,
       });
 
       setActiveCampaign(created.campaign.id);
@@ -323,6 +338,13 @@ function Compose() {
                   </Select>
                 </Field>
               </div>
+
+              <AudienceNote
+                preview={preview}
+                skipContacted={skipContacted}
+                onSkipContacted={setSkipContacted}
+                busy={isBusy}
+              />
 
               <Field label="Subject" required htmlFor="subject">
                 <Input
@@ -682,6 +704,57 @@ function LiveProgress({
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Who the send is for, and who is being left out.
+ *
+ * The exclusions are named rather than summed: an address held back as already
+ * emailed is a deliberate guard, and the operator can lift it here rather than
+ * wondering why the count is short.
+ */
+function AudienceNote({
+  preview,
+  skipContacted,
+  onSkipContacted,
+  busy,
+}: {
+  preview: PreviewResponse | null;
+  skipContacted: boolean;
+  onSkipContacted: (next: boolean) => void;
+  busy: boolean;
+}) {
+  const skipped = preview?.skipped ?? [];
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm text-slate-700 dark:text-slate-300">
+          <strong className="font-mono">{(preview?.recipientCount ?? 0).toLocaleString('en-US')}</strong> will be
+          emailed, then marked as contacted.
+        </span>
+        <Checkbox
+          checked={skipContacted}
+          onChange={(event) => onSkipContacted(event.target.checked)}
+          disabled={busy}
+          label="Skip contacts already emailed"
+        />
+      </div>
+
+      {skipped.length > 0 && (
+        <p className="mt-3 border-t border-slate-200 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+          <span className="font-medium">{skipped.length} already emailed</span>
+          <span className="ml-1.5 font-mono text-[11px] text-slate-400 dark:text-slate-500">
+            {skipped
+              .slice(0, 6)
+              .map((entry) => entry.email)
+              .join(', ')}
+            {skipped.length > 6 && ` +${skipped.length - 6} more`}
+          </span>
+        </p>
+      )}
+    </div>
   );
 }
 

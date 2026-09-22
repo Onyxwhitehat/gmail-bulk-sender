@@ -5,8 +5,11 @@ import { dedupeRecipients, guessEmailColumn, guessNameColumn, parseDelimited, pa
 import { requireAuth } from '../middleware/auth.js';
 import { heavyLimiter } from '../middleware/rateLimit.js';
 import {
+  countAwaitingFirstContact,
+  countRecipients,
   createGroup,
   deleteAllRecipients,
+  deleteContactedRecipients,
   deleteGroup,
   deleteRecipients,
   listGroups,
@@ -21,10 +24,15 @@ export const recipientsRouter = Router();
 const listQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
   groupId: z.coerce.number().int().positive().nullable().optional(),
-  source: z.enum(['manual', 'sheets', 'csv']).optional(),
+  source: z.enum(['manual', 'csv']).optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(100),
   offset: z.coerce.number().int().min(0).default(0),
   includeUnsubscribed: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  /** The Add Recipient list proper: contacts with no outreach on record. */
+  awaitingFirstContact: z
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
@@ -39,6 +47,9 @@ recipientsRouter.get(
     res.json({
       recipients: rows.map(toPublic),
       total,
+      // What a first-contact campaign would actually reach, whatever this page
+      // is currently filtered to.
+      awaitingTotal: countAwaitingFirstContact(),
       limit: query.limit,
       offset: query.offset,
     });
@@ -57,6 +68,7 @@ recipientsRouter.post(
   asyncHandler(async (req, res) => {
     const { text } = parseSchema.parse(req.body);
     const result = parseRecipientList(text);
+
     res.json({
       valid: result.valid.length,
       invalid: result.invalid.length,
@@ -144,7 +156,11 @@ recipientsRouter.post(
       .filter((r) => r.email.trim() !== '');
 
     const { unique, removed } = dedupeRecipients(candidates);
-    const saved = saveRecipients(unique, { source: 'csv', sourceRef: input.filename ?? null, groupId: input.groupId });
+    const saved = saveRecipients(unique, {
+      source: 'csv',
+      sourceRef: input.filename ?? null,
+      groupId: input.groupId,
+    });
 
     res.json({
       imported: saved.inserted,
@@ -163,6 +179,15 @@ recipientsRouter.post(
   requireAuth,
   asyncHandler(async (_req, res) => {
     res.json({ removed: removeDuplicates() });
+  }),
+);
+
+/** Housekeeping: drop the contacts that have already been written to. */
+recipientsRouter.post(
+  '/prune-contacted',
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    res.json({ removed: deleteContactedRecipients(), total: countRecipients() });
   }),
 );
 
@@ -235,6 +260,8 @@ function toPublic(row: {
   unsubscribed: number;
   bounced: number;
   created_at: string;
+  contacted_at?: string | null;
+  contacted_via?: string | null;
 }) {
   return {
     id: row.id,
@@ -246,5 +273,9 @@ function toPublic(row: {
     unsubscribed: row.unsubscribed === 1,
     bounced: row.bounced === 1,
     createdAt: row.created_at,
+    // Set once a campaign has written to this address. Empty means the contact
+    // is still waiting for its first email.
+    contactedAt: row.contacted_at || null,
+    contactedVia: row.contacted_via || null,
   };
 }

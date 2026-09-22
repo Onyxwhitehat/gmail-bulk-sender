@@ -80,6 +80,8 @@ export interface Recipient {
   unsubscribed: boolean;
   bounced: boolean;
   createdAt: string;
+  /** When this address was first emailed. Null means never. */
+  contactedAt: string | null;
 }
 
 export interface RecipientGroup {
@@ -156,21 +158,6 @@ export interface EmailTemplate {
   bodyHtml: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Worksheet {
-  sheetId: number;
-  title: string;
-  index: number;
-  rowCount: number;
-  columnCount: number;
-}
-
-export interface Spreadsheet {
-  spreadsheetId: string;
-  title: string;
-  url: string;
-  worksheets: Worksheet[];
 }
 
 export interface Attachment {

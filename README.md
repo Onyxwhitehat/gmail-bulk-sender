@@ -1,6 +1,6 @@
 # Bulk Email Sender
 
-A full-stack dashboard for sending personalised bulk email through the **Gmail API** with OAuth 2.0 — no SMTP, no app passwords. Import recipients from Google Sheets or paste them in, compose once, and watch delivery progress live.
+A full-stack dashboard for sending personalised bulk email through the **Gmail API** with OAuth 2.0 — no SMTP, no app passwords. Paste your recipients in or upload a CSV, compose once, and watch delivery progress live.
 
 <br />
 
@@ -29,7 +29,6 @@ A full-stack dashboard for sending personalised bulk email through the **Gmail A
 - Live token status, forced refresh, and a one-click test email
 
 **Recipients**
-- Import from Google Sheets: pick the worksheet and the email/name/company columns
 - Paste addresses separated by commas, semicolons, newlines, tabs or pipes — auto-detected
 - CSV/TSV upload with drag-and-drop and automatic column detection
 - Parses `Name <email@host>` and `email@host (Name)` forms
@@ -75,7 +74,7 @@ A full-stack dashboard for sending personalised bulk email through the **Gmail A
 └──────────────────────────┘         └───────────────┬──────────────┘
                                                      │ OAuth 2.0
                                      ┌───────────────▼──────────────┐
-                                     │  Gmail API · Sheets API      │
+                                     │  Gmail API                   │
                                      └──────────────────────────────┘
 ```
 
@@ -128,12 +127,11 @@ This is a one-time configuration. It takes about five minutes.
 
 Go to the [Google Cloud Console](https://console.cloud.google.com/projectcreate) and create a project, or select an existing one.
 
-### 2. Enable the APIs
+### 2. Enable the API
 
-**APIs & Services → Library**, then enable both:
+**APIs & Services → Library**, then enable:
 
 - **Gmail API**
-- **Google Sheets API**
 
 ### 3. Configure the OAuth consent screen
 
@@ -150,7 +148,6 @@ Add these scopes:
 ```
 https://www.googleapis.com/auth/gmail.send
 https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/spreadsheets.readonly
 https://www.googleapis.com/auth/userinfo.email
 ```
 
@@ -441,7 +438,6 @@ Back up your `ENCRYPTION_KEY` alongside it — the database is useless without i
 
 | Source | How |
 | --- | --- |
-| Google Sheets | **Google Sheets** → paste the URL → pick the worksheet and columns → **Import** |
 | Paste | **Recipients** → paste into the box → **Add recipients** |
 | CSV | **Recipients** → drop a file onto the upload area |
 
@@ -535,17 +531,6 @@ All endpoints are under `/api`. Everything except `/health`, `/auth/*` and `/goo
 </details>
 
 <details>
-<summary><strong>Google Sheets</strong></summary>
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/sheets/load` | Resolve a URL and list worksheets |
-| `POST` | `/sheets/preview` | Read rows with column suggestions |
-| `POST` | `/sheets/import` | Import the selected columns |
-
-</details>
-
-<details>
 <summary><strong>Recipients</strong></summary>
 
 | Method | Path | Description |
@@ -624,7 +609,6 @@ All endpoints are under `/api`. Everything except `/health`, `/auth/*` and `/goo
 │   │   └── services/
 │   │       ├── google.ts       OAuth handshake and token lifecycle
 │   │       ├── gmail.ts        messages.send
-│   │       ├── sheets.ts       Spreadsheet reading
 │   │       ├── mime.ts         RFC 5322 message builder
 │   │       ├── sender.ts       The sending engine
 │   │       ├── events.ts       SSE hub
@@ -632,8 +616,8 @@ All endpoints are under `/api`. Everything except `/health`, `/auth/*` and `/goo
 │   │       └── settings.ts     Settings with encrypted values
 │   └── Dockerfile
 ├── web/                        Next.js 15 dashboard
-│   ├── app/                    Routes: dashboard, gmail, sheets,
-│   │                           recipients, compose, logs, settings, login
+│   ├── app/                    Routes: dashboard, gmail, recipients,
+│   │                           compose, logs, settings, login
 │   ├── components/
 │   │   ├── AppShell.tsx        Sidebar, header, auth gate
 │   │   ├── providers.tsx       Theme, toasts, session, confirm dialogs

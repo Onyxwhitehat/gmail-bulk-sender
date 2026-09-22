@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Field,
   Input,
@@ -49,6 +50,8 @@ function Recipients() {
 
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState<string>('');
+  /** The Add Recipient list proper: everyone with no outreach on record. */
+  const [awaitingOnly, setAwaitingOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const pageSize = 50;
@@ -63,17 +66,18 @@ function Recipients() {
     });
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (groupFilter) params.set('groupId', groupFilter);
+    if (awaitingOnly) params.set('awaitingFirstContact', 'true');
     return `/api/recipients?${params.toString()}`;
-  }, [debouncedSearch, groupFilter, page]);
+  }, [debouncedSearch, groupFilter, page, awaitingOnly]);
 
-  const listQuery = useApi<{ recipients: Recipient[]; total: number }>(listPath);
+  const listQuery = useApi<{ recipients: Recipient[]; total: number; awaitingTotal: number }>(listPath);
   const groupsQuery = useApi<{ groups: RecipientGroup[] }>('/api/recipients/groups/all');
 
   // Any change to the filters invalidates the current page index.
   useEffect(() => {
     setPage(0);
     setSelected(new Set());
-  }, [debouncedSearch, groupFilter]);
+  }, [debouncedSearch, groupFilter, awaitingOnly]);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([listQuery.reload(), groupsQuery.reload()]);
@@ -82,6 +86,8 @@ function Recipients() {
 
   const recipients = listQuery.data?.recipients ?? [];
   const total = listQuery.data?.total ?? 0;
+  /** What a first-contact campaign would actually reach. */
+  const awaiting = listQuery.data?.awaitingTotal ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
   const toggleSelect = (id: number) => {
@@ -124,6 +130,30 @@ function Recipients() {
     await refreshAll();
   };
 
+  /**
+   * Housekeeping. Nothing here is needed to send — contacted addresses are left
+   * out of a campaign either way — so this is only about the list reading as
+   * what it is: the people still to email.
+   */
+  const pruneContacted = async () => {
+    const done = total - awaiting;
+    const ok = await confirm({
+      title: `Remove ${done.toLocaleString()} contacted recipient${done === 1 ? '' : 's'}?`,
+      message:
+        'These have already been emailed, so no campaign would send to them anyway. Anyone who opted out or bounced is kept here so they can never be added back.',
+      confirmLabel: 'Remove them',
+    });
+    if (!ok) return;
+
+    const result = await toast.run(api.post<{ removed: number }>('/api/recipients/prune-contacted'), {
+      error: 'Could not remove them',
+    });
+    if (result) {
+      toast.success(`Removed ${result.removed.toLocaleString()} already-contacted recipient${result.removed === 1 ? '' : 's'}`);
+      await refreshAll();
+    }
+  };
+
   const dedupe = async () => {
     const result = await toast.run(api.post<{ removed: number }>('/api/recipients/dedupe'), {
       error: 'Could not remove duplicates',
@@ -140,12 +170,17 @@ function Recipients() {
     <>
       <PageHeader
         title="Recipients"
-        description="Paste addresses, upload a CSV, or import from Google Sheets. Duplicates and invalid addresses are removed automatically."
+        description="Paste addresses or upload a CSV. Duplicates and invalid addresses are removed automatically."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => void dedupe()}>
               Remove duplicates
             </Button>
+            {total > awaiting && (
+              <Button variant="secondary" size="sm" onClick={() => void pruneContacted()}>
+                Remove contacted ({(total - awaiting).toLocaleString()})
+              </Button>
+            )}
             {total > 0 && (
               <Button
                 variant="ghost"
@@ -169,7 +204,7 @@ function Recipients() {
 
         <div className="xl:col-span-3">
           <Card
-            title={`Address book (${total.toLocaleString()})`}
+            title={`Address book (${total.toLocaleString()}) · ${awaiting.toLocaleString()} still to email`}
             actions={
               selected.size > 0 && (
                 <Button
@@ -208,6 +243,11 @@ function Recipients() {
                   </option>
                 ))}
               </Select>
+              <Checkbox
+                checked={awaitingOnly}
+                onChange={(event) => setAwaitingOnly(event.target.checked)}
+                label="Not emailed yet"
+              />
             </div>
 
             {listQuery.loading ? (
@@ -222,7 +262,7 @@ function Recipients() {
                 description={
                   search || groupFilter
                     ? 'Try a different search term or clear the filters.'
-                    : 'Paste addresses in the box on the left, upload a CSV, or import from Google Sheets.'
+                    : 'Paste addresses in the box on the left, or upload a CSV.'
                 }
               />
             ) : (
@@ -273,12 +313,20 @@ function Recipients() {
                                 Unsubscribed
                               </Badge>
                             )}
+                            {/* Held back from the next campaign, and this is why. */}
+                            {recipient.contactedAt && (
+                              <span title={`Emailed ${recipient.contactedAt}`}>
+                                <Badge tone="neutral" className="ml-2">
+                                  Contacted
+                                </Badge>
+                              </span>
+                            )}
                           </td>
                           <td className="max-w-[10rem] truncate px-4 py-2.5 text-slate-600 dark:text-slate-400">
                             {recipient.name ?? '—'}
                           </td>
                           <td className="px-4 py-2.5">
-                            <Badge tone={recipient.source === 'sheets' ? 'info' : recipient.source === 'csv' ? 'brand' : 'neutral'}>
+                            <Badge tone={recipient.source === 'csv' ? 'brand' : 'neutral'}>
                               {recipient.source}
                             </Badge>
                           </td>

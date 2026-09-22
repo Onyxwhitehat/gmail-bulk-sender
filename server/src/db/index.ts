@@ -11,10 +11,26 @@ mkdirSync(dirname(config.databaseFile), { recursive: true });
 
 export const db = new DatabaseSync(config.databaseFile);
 
+/**
+ * Adds a column to a table that predates it. `CREATE TABLE IF NOT EXISTS` does
+ * nothing to a table already there, so a column added later needs its own step;
+ * checking first keeps this as re-runnable as the rest of the schema.
+ */
+function addColumn(table: string, column: string, declaration: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{ name: string }>;
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+  logger.info(`added ${table}.${column}`);
+}
+
 /** Applies schema.sql. Every statement is idempotent, so this runs on every boot. */
 export function migrate(): void {
   const schema = readFileSync(resolve(here, 'schema.sql'), 'utf8');
   db.exec(schema);
+  // An address book built before this records no outreach of its own, so the
+  // columns that hold it have to be added to the table already there.
+  addColumn('recipients', 'contacted_at', "TEXT NOT NULL DEFAULT ''");
+  addColumn('recipients', 'contacted_via', "TEXT NOT NULL DEFAULT ''");
   logger.info(`database ready at ${config.databaseFile}`);
 }
 

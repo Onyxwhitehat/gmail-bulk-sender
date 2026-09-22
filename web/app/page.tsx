@@ -76,7 +76,7 @@ function Dashboard() {
               <div>
                 <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">No Gmail account connected</p>
                 <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300">
-                  Connect a Gmail account with OAuth 2.0 before you can send or import from Google Sheets.
+                  Connect a Gmail account with OAuth 2.0 before you can send.
                 </p>
               </div>
             </div>

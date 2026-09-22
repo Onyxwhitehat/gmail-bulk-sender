@@ -19,6 +19,7 @@ build/
 # Scratch files holding generated credentials for a deployment target
 *.local.txt
 *secrets*.txt
+*[Cc]redentials*.txt
 
 # Database (contains encrypted OAuth tokens and recipient data)
 data/

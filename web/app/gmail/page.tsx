@@ -434,16 +434,16 @@ function SetupGuide({ redirectUri }: { redirectUri: string }) {
       ),
     },
     {
-      title: 'Enable the APIs',
-      body: <>Under APIs &amp; Services → Library, enable both the <strong>Gmail API</strong> and the <strong>Google Sheets API</strong>.</>,
+      title: 'Enable the API',
+      body: <>Under APIs &amp; Services → Library, enable the <strong>Gmail API</strong>.</>,
     },
     {
       title: 'Configure the OAuth consent screen',
       body: (
         <>
-          Choose <strong>External</strong>, fill in the app name and support email, then add the scopes{' '}
-          <code className="text-xs">gmail.send</code> and <code className="text-xs">spreadsheets.readonly</code>. While
-          the app is in Testing, add your own address under <strong>Test users</strong>.
+          Choose <strong>External</strong>, fill in the app name and support email, then add the{' '}
+          <code className="text-xs">gmail.send</code> scope. While the app is in Testing, add your own address under{' '}
+          <strong>Test users</strong>.
         </>
       ),
     },

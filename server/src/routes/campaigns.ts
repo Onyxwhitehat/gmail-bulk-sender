@@ -31,6 +31,8 @@ const campaignSchema = z.object({
   recipientIds: z.array(z.number().int().positive()).max(100_000).optional(),
   groupId: z.number().int().positive().nullable().default(null),
   includeAll: z.boolean().default(true),
+  /** Leave out addresses this app has already emailed. */
+  skipContacted: z.boolean().default(true),
 });
 
 function assertAttachmentSize(attachments: Array<{ content: string }>): void {
@@ -54,9 +56,13 @@ campaignsRouter.post(
     const bodyHtml = sanitizeHtml(input.bodyHtml);
     if (!bodyHtml.trim()) throw AppError.badRequest('The email body cannot be empty.');
 
-    const recipients = resolveRecipients(input);
+    const { recipients, skipped } = resolveAudience(input);
     if (recipients.length === 0) {
-      throw AppError.badRequest('No recipients matched your selection. Import or select recipients first.');
+      throw AppError.badRequest(
+        skipped.length
+          ? `Every address in your selection has already been emailed (${skipped.length}). Nothing was queued.`
+          : 'No recipients matched your selection. Import or select recipients first.',
+      );
     }
 
     const accountId = input.accountId ?? getDefaultAccount()?.id ?? null;
@@ -75,7 +81,8 @@ campaignsRouter.post(
 
       recipients.forEach((recipient, index) => {
         run(
-          'INSERT INTO queue_items (campaign_id, recipient_id, email, name, company, position) VALUES (?, ?, ?, ?, ?, ?)',
+          `INSERT INTO queue_items (campaign_id, recipient_id, email, name, company, position)
+           VALUES (?, ?, ?, ?, ?, ?)`,
           created.lastInsertRowid,
           recipient.id,
           recipient.email,
@@ -88,7 +95,11 @@ campaignsRouter.post(
       return created.lastInsertRowid;
     });
 
-    res.status(201).json({ campaign: publicCampaign(requireCampaign(campaignId)), queued: recipients.length });
+    res.status(201).json({
+      campaign: publicCampaign(requireCampaign(campaignId)),
+      queued: recipients.length,
+      skipped,
+    });
   }),
 );
 
@@ -140,6 +151,7 @@ const previewSchema = z.object({
   recipientIds: z.array(z.number().int().positive()).max(100_000).optional(),
   groupId: z.number().int().positive().nullable().default(null),
   includeAll: z.boolean().default(true),
+  skipContacted: z.boolean().default(true),
 });
 
 campaignsRouter.post(
@@ -147,7 +159,7 @@ campaignsRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const input = previewSchema.parse(req.body);
-    const recipients = resolveRecipients(input);
+    const { recipients, skipped } = resolveAudience(input);
     const sample = recipients[0] ?? { email: 'sample@example.com', name: 'Sample Person', company: null, id: 0 };
 
     const delayMin = getNumberSetting('delay_min_ms');
@@ -159,6 +171,7 @@ campaignsRouter.post(
     res.json({
       recipientCount: recipients.length,
       sampleRecipients: recipients.slice(0, 25).map((r) => ({ email: r.email, name: r.name })),
+      skipped,
       renderedSubject: renderTemplate(input.subject, sample),
       renderedBody: sanitizeHtml(renderTemplate(input.bodyHtml, sample)) + signatureSuffix(sample),
       estimate: {
@@ -258,9 +271,58 @@ interface ResolvedRecipient {
   email: string;
   name: string | null;
   company: string | null;
+  /** Outreach recorded against the address itself. Empty means none. */
+  contactedAt?: string | null;
 }
 
-function resolveRecipients(input: {
+/** An address left out of the send, and why. */
+export interface SkippedRecipient {
+  email: string;
+  reason: 'already-contacted';
+  /** The date of that first contact, when one is on record. */
+  detail: string;
+}
+
+interface AudienceInput {
+  recipientIds?: number[];
+  groupId?: number | null;
+  includeAll?: boolean;
+  skipContacted?: boolean;
+}
+
+/**
+ * Who this campaign goes to, and who it deliberately misses.
+ *
+ * The exclusions come back with the audience so they can be shown before
+ * anything is sent: an address already emailed is left out of a first-contact
+ * campaign, and the operator gets told how many that was rather than finding a
+ * short queue with no explanation.
+ */
+export function resolveAudience(input: AudienceInput): {
+  recipients: ResolvedRecipient[];
+  skipped: SkippedRecipient[];
+} {
+  const rows = resolveRecipients(input);
+  if (input.skipContacted === false) return { recipients: rows, skipped: [] };
+
+  const recipients: ResolvedRecipient[] = [];
+  const skipped: SkippedRecipient[] = [];
+
+  for (const row of rows) {
+    if (row.contactedAt) {
+      skipped.push({ email: row.email, reason: 'already-contacted', detail: row.contactedAt });
+      continue;
+    }
+    recipients.push(row);
+  }
+
+  return { recipients, skipped };
+}
+
+const RECIPIENT_SELECT = `SELECT r.id, r.email, r.name, r.company, r.contacted_at AS contactedAt
+    FROM recipients r`;
+
+export function resolveRecipients(input: {
   recipientIds?: number[];
   groupId?: number | null;
   includeAll?: boolean;
@@ -268,15 +330,14 @@ function resolveRecipients(input: {
   if (input.recipientIds && input.recipientIds.length > 0) {
     const placeholders = input.recipientIds.map(() => '?').join(',');
     return all<ResolvedRecipient>(
-      `SELECT id, email, name, company FROM recipients
-        WHERE id IN (${placeholders}) AND unsubscribed = 0 ORDER BY id`,
+      `${RECIPIENT_SELECT} WHERE r.id IN (${placeholders}) AND r.unsubscribed = 0 ORDER BY r.id`,
       ...input.recipientIds,
     );
   }
 
   if (input.groupId) {
     return all<ResolvedRecipient>(
-      'SELECT id, email, name, company FROM recipients WHERE group_id = ? AND unsubscribed = 0 ORDER BY id',
+      `${RECIPIENT_SELECT} WHERE r.group_id = ? AND r.unsubscribed = 0 ORDER BY r.id`,
       input.groupId,
     );
   }
@@ -285,7 +346,7 @@ function resolveRecipients(input: {
 
   // Everyone. Note this is deliberately unpaginated — the list endpoint caps results
   // for the UI, but a send has to cover the entire address book.
-  return all<ResolvedRecipient>('SELECT id, email, name, company FROM recipients WHERE unsubscribed = 0 ORDER BY id');
+  return all<ResolvedRecipient>(`${RECIPIENT_SELECT} WHERE r.unsubscribed = 0 ORDER BY r.id`);
 }
 
 function signatureSuffix(sample: { email: string; name: string | null; company: string | null }): string {

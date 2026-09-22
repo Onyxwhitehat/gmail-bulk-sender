@@ -5,7 +5,6 @@ import { googleRouter } from './google.js';
 import { logsRouter } from './logs.js';
 import { recipientsRouter } from './recipients.js';
 import { settingsRouter } from './settings.js';
-import { sheetsRouter } from './sheets.js';
 import { statsRouter } from './stats.js';
 import { streamRouter } from './stream.js';
 import { templatesRouter } from './templates.js';
@@ -18,7 +17,6 @@ apiRouter.get('/health', (_req, res) => {
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/google', googleRouter);
-apiRouter.use('/sheets', sheetsRouter);
 apiRouter.use('/recipients', recipientsRouter);
 apiRouter.use('/campaigns', campaignsRouter);
 apiRouter.use('/logs', logsRouter);

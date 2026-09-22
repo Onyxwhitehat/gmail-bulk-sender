@@ -16,7 +16,6 @@ import {
   MoonIcon,
   PencilIcon,
   SettingsIcon,
-  SheetIcon,
   SunIcon,
   UsersIcon,
   XIcon,
@@ -26,7 +25,6 @@ import {
 const NAV = [
   { href: '/', label: 'Dashboard', icon: DashboardIcon },
   { href: '/gmail', label: 'Gmail Connection', icon: MailIcon },
-  { href: '/sheets', label: 'Google Sheets', icon: SheetIcon },
   { href: '/recipients', label: 'Recipients', icon: UsersIcon },
   { href: '/compose', label: 'Compose', icon: PencilIcon },
   { href: '/logs', label: 'Sending Logs', icon: ListIcon },

@@ -6,6 +6,7 @@ import { sendMessage } from './gmail.js';
 import { events } from './events.js';
 import { getAccount, getDefaultAccount, markAccountError } from './google.js';
 import { getNumberSetting, getSetting } from './settings.js';
+import { markRecipientContacted } from './recipients.js';
 import type { Attachment } from './mime.js';
 
 export type EngineState = 'idle' | 'running' | 'paused' | 'cancelling' | 'completed';
@@ -426,6 +427,13 @@ class SendEngine {
       status === 'sent' ? new Date().toISOString() : null,
       item.id,
     );
+
+    // The address book learns about outreach when the mail is actually away —
+    // not when the campaign was built, and not for a send that failed or was
+    // skipped. This is what keeps the address out of the next campaign.
+    if (status === 'sent') {
+      markRecipientContacted(item.email, new Date().toISOString().slice(0, 10), 'send');
+    }
 
     run(
       `INSERT INTO send_logs

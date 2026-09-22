@@ -2,7 +2,7 @@
   "name": "ai-bulk-email-sender",
   "version": "1.0.0",
   "private": true,
-  "description": "AI-powered bulk email sender: Gmail API + Google Sheets, personalized bulk sending with live progress.",
+  "description": "AI-powered bulk email sender: Gmail API, personalized bulk sending with live progress.",
   "workspaces": [
     "server",
     "web"

@@ -48,7 +48,7 @@ Next steps:
   3. Gmail Connection page           Paste your Google Client ID + Secret, then connect
 
 Google Cloud setup (one time):
-  - Enable the Gmail API and the Google Sheets API
+  - Enable the Gmail API
   - Create an OAuth 2.0 Web application client
   - Add this Authorised redirect URI:
       http://localhost:4000/api/google/callback

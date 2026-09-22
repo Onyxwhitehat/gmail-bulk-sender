@@ -64,12 +64,16 @@ CREATE TABLE IF NOT EXISTS recipients (
   email      TEXT NOT NULL UNIQUE COLLATE NOCASE,
   name       TEXT,
   company    TEXT,
-  source     TEXT NOT NULL DEFAULT 'manual',  -- manual | sheets | csv
-  source_ref TEXT,                            -- sheet id / filename
+  source     TEXT NOT NULL DEFAULT 'manual',  -- manual | csv
+  source_ref TEXT,                            -- filename
   group_id   INTEGER REFERENCES recipient_groups(id) ON DELETE SET NULL,
   is_valid   INTEGER NOT NULL DEFAULT 1,
   unsubscribed INTEGER NOT NULL DEFAULT 0,
   bounced    INTEGER NOT NULL DEFAULT 0,
+  -- When this address was first written to, as an ISO date. Empty means never.
+  contacted_at TEXT NOT NULL DEFAULT '',
+  -- What put that date there. 'send' is the only writer today.
+  contacted_via TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
