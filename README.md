@@ -96,8 +96,8 @@ A full-stack dashboard for sending personalised bulk email through the **Gmail A
 **Requirements:** Node.js 22.5+ (24 LTS recommended) and npm 10+.
 
 ```bash
-git clone <your-repo-url> "Email Sender"
-cd "Email Sender"
+git clone https://github.com/Onyxwhitehat/gmail-bulk-sender.git
+cd gmail-bulk-sender
 
 npm install      # installs both workspaces
 npm run setup    # generates secrets and writes .env files
@@ -251,7 +251,7 @@ service to one replica, and points the health check at `/api/health`.
 ### 1. Create the service
 
 1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
-2. Pick `gmail-bulk-sender` (grant access to the private repo when prompted)
+2. Pick `gmail-bulk-sender`
 3. Railway reads `railway.toml` and builds `server/Dockerfile` automatically
 
 ### 2. Add a volume — do this before the first real use
@@ -342,7 +342,7 @@ API on a container host.
 ### 1. Build and run
 
 ```bash
-git clone <your-repo-url> /opt/bulk-email
+git clone https://github.com/Onyxwhitehat/gmail-bulk-sender.git /opt/bulk-email
 cd /opt/bulk-email
 cp .env.example .env      # set APP_URL / API_URL to your real domains + secrets
 docker compose up -d --build
